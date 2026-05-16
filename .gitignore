@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.ipynb_checkpoints/
+
+# Données générées
+battery_optimization_results.csv
+battery_params.json
+battery_sample_week.png
+battery_full_period.png
+battery_spread_analysis.png
+battery_dashboard.html
+
+# Notebooks — exclure les outputs lourds (garder le fichier)
+# battery_arbitrage_optimizer.ipynb  ← inclus intentionnellement
+
+# Données confidentielles client
+SIREA Group/
+_test_nb.py
+
+# Streamlit
+.streamlit/secrets.toml
+
+# OS
+.DS_Store
+Thumbs.db
