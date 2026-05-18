@@ -206,15 +206,15 @@ with st.sidebar:
         eff_rt        = st.slider("Rendement aller-retour", 0.70, 0.999, 0.970, 0.005, format="%.3f")
 
     with st.expander("Etat de charge (SOC)", expanded=True):
-        soc_min_pct  = st.slider("SOC minimum (%)",  0,  30, 10, 1) / 100
-        soc_max_pct  = st.slider("SOC maximum (%)", 70, 100, 90, 1) / 100
+        soc_min_pct  = st.slider("SOC minimum (%)",  0,  30,  5, 1) / 100
+        soc_max_pct  = st.slider("SOC maximum (%)", 70, 100, 95, 1) / 100
         soc_init_pct = st.slider("SOC initial (%)",  10, 90, 50, 5) / 100
 
     with st.expander("Vieillissement & marche", expanded=False):
-        aging_per_fec  = st.number_input("Vieillissement / FEC", value=2e-4, format="%.2e", step=1e-5)
+        aging_per_fec  = st.number_input("Vieillissement / FEC", value=1e-5, format="%.2e", step=1e-6)
         capacity_eol   = st.slider("Capacite fin de vie (%)", 50, 95, 80, 5) / 100
         agg_spread     = st.number_input("Spread agregateur (EUR/kWh)", value=0.0, format="%.4f")
-        min_spread_mwh = st.slider("Spread min decharge (EUR/MWh)", 0, 50, 15, 1)
+        min_spread_mwh = st.slider("Spread min decharge (EUR/MWh)", 0, 50, 10, 1)
 
     start_date = START_DATE
 
