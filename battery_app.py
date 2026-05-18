@@ -37,24 +37,13 @@ def _render_header():
     if LOGO_PATH.exists():
         with open(LOGO_PATH, "rb") as f:
             logo_b64 = base64.b64encode(f.read()).decode()
-        logo_tag = (
-            f'<img src="data:image/png;base64,{logo_b64}" '
-            f'style="height:64px;margin-right:18px;vertical-align:middle;">'
-        )
+        logo_tag = f'<img src="data:image/png;base64,{logo_b64}" style="height:64px;margin-right:18px;vertical-align:middle;">'
     else:
         logo_tag = ""
+    title_tag = '<span style="font-size:2rem;font-weight:700;line-height:1.2;">BESS Intra day Market Modelisation</span>'
+    subtitle   = '<p style="font-style:italic;font-size:0.82em;color:#555;margin-top:2px;">Data EPEX Spot &nbsp;(Période&nbsp;: 1.1.2025 – 15.04.2026)</p>'
     st.markdown(
-        f"""
-        <div style="display:flex;align-items:center;margin-bottom:4px;">
-            {logo_tag}
-            <span style="font-size:2rem;font-weight:700;line-height:1.2;">
-                BESS Intra day Market Modelisation
-            </span>
-        </div>
-        <p style="font-style:italic;font-size:0.82em;color:#555;margin-top:0;">
-            Data EPEX Spot &nbsp;(Période: 1.1.2025 – 15.04.2026)
-        </p>
-        """,
+        f'<div style="display:flex;align-items:center;margin-bottom:0;">{logo_tag}{title_tag}</div>{subtitle}',
         unsafe_allow_html=True,
     )
 
