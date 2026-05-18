@@ -5,6 +5,7 @@ Optimisation arbitrage spot price France (EPEX)
 Lancement :  streamlit run battery_app.py
 """
 
+import base64
 import time
 from datetime import date, timedelta
 from pathlib import Path
@@ -26,6 +27,37 @@ st.set_page_config(
 
 SCRIPT_DIR = Path(__file__).parent
 DATA_CSV   = SCRIPT_DIR / "data_France_historical-spot_price_hourly.csv"
+LOGO_PATH  = SCRIPT_DIR / "power_capture_logo.png"
+
+# Fixed simulation start date (data coverage: 1.1.2025 – 15.04.2026)
+START_DATE = date(2025, 1, 1)
+
+
+def _render_header():
+    if LOGO_PATH.exists():
+        with open(LOGO_PATH, "rb") as f:
+            logo_b64 = base64.b64encode(f.read()).decode()
+        logo_tag = (
+            f'<img src="data:image/png;base64,{logo_b64}" '
+            f'style="height:64px;margin-right:18px;vertical-align:middle;">'
+        )
+    else:
+        logo_tag = ""
+    st.markdown(
+        f"""
+        <div style="display:flex;align-items:center;margin-bottom:4px;">
+            {logo_tag}
+            <span style="font-size:2rem;font-weight:700;line-height:1.2;">
+                BESS Intra day Market Modelisation
+            </span>
+        </div>
+        <p style="font-style:italic;font-size:0.82em;color:#555;margin-top:0;">
+            Data EPEX Spot &nbsp;(Période: 1.1.2025 – 15.04.2026)
+        </p>
+        """,
+        unsafe_allow_html=True,
+    )
+
 
 # ── Fonctions de simulation ───────────────────────────────────────────────────
 
@@ -194,9 +226,7 @@ with st.sidebar:
         agg_spread     = st.number_input("Spread agregateur (EUR/kWh)", value=0.0, format="%.4f")
         min_spread_mwh = st.slider("Spread min decharge (EUR/MWh)", 0, 50, 15, 1)
 
-    with st.expander("Periode", expanded=False):
-        start_date = st.date_input("Date debut", value=date(2025, 1, 1),
-                                   min_value=date(2015, 1, 1), max_value=date(2026, 4, 30))
+    start_date = START_DATE
 
     eta_c = eff_rt ** 0.5
     eta_d = eff_rt ** 0.5
@@ -240,7 +270,7 @@ if run_btn:
 
 # ── Affichage des resultats ───────────────────────────────────────────────────
 if 'results' not in st.session_state:
-    st.title("Battery EMS — Optimisation Arbitrage Spot France")
+    _render_header()
     st.info("Definissez les parametres dans la barre laterale, puis cliquez **Lancer la simulation**.")
     st.stop()
 
@@ -258,7 +288,7 @@ cap_final  = results['capacity_kwh'].iloc[-1]
 fec_total  = results['cumulative_fec'].iloc[-1]
 cap_loss   = (1 - cap_final / capacity_kwh) * 100
 
-st.title("Battery EMS — Resultats de simulation")
+_render_header()
 c1, c2, c3, c4, c5, c6 = st.columns(6)
 c1.metric("Profit net",       f"{net_profit:,.0f} EUR")
 c2.metric("Profit / jour",    f"{avg_daily:,.1f} EUR/j")
