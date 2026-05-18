@@ -29,23 +29,21 @@ SCRIPT_DIR = Path(__file__).parent
 DATA_CSV   = SCRIPT_DIR / "data_France_historical-spot_price_hourly.csv"
 LOGO_PATH  = SCRIPT_DIR / "power_capture_logo.png"
 
+st.markdown("""
+<style>
+[data-testid="stMetricValue"] { font-size: 1.05rem !important; }
+[data-testid="stMetricLabel"] { font-size: 0.78rem !important; }
+</style>
+""", unsafe_allow_html=True)
+
 # Fixed simulation start date (data coverage: 1.1.2025 – 15.04.2026)
 START_DATE = date(2025, 1, 1)
 
 
 def _render_header():
-    if LOGO_PATH.exists():
-        with open(LOGO_PATH, "rb") as f:
-            logo_b64 = base64.b64encode(f.read()).decode()
-        logo_tag = f'<img src="data:image/png;base64,{logo_b64}" style="height:64px;margin-right:18px;vertical-align:middle;">'
-    else:
-        logo_tag = ""
     title_tag = '<span style="font-size:2rem;font-weight:700;line-height:1.2;">BESS Intra day Market Modelisation</span>'
     subtitle   = '<p style="font-style:italic;font-size:0.82em;color:#555;margin-top:2px;">Data EPEX Spot &nbsp;(Période&nbsp;: 1.1.2025 – 15.04.2026)</p>'
-    st.markdown(
-        f'<div style="display:flex;align-items:center;margin-bottom:0;">{logo_tag}{title_tag}</div>{subtitle}',
-        unsafe_allow_html=True,
-    )
+    st.markdown(f'{title_tag}{subtitle}', unsafe_allow_html=True)
 
 
 # ── Fonctions de simulation ───────────────────────────────────────────────────
@@ -196,6 +194,9 @@ def load_spot_data():
 
 # ── Sidebar — parametres ──────────────────────────────────────────────────────
 with st.sidebar:
+    if LOGO_PATH.exists():
+        st.image(str(LOGO_PATH), use_container_width=True)
+        st.markdown("<div style='margin-bottom:6px'></div>", unsafe_allow_html=True)
     st.title("⚙️ Parametres")
 
     with st.expander("Batterie", expanded=True):
@@ -363,13 +364,14 @@ with tab_daily:
     spot_max  = day_data['spot_price_eur_mwh'].max()
     spot_min  = day_data['spot_price_eur_mwh'].min()
 
-    k1, k2, k3, k4, k5, k6 = st.columns(6)
+    k1, k2, k3 = st.columns(3)
     k1.metric("Contribution jour", f"{pr_d:,.1f} EUR")
-    k2.metric("Achat reseau",  f"{ch_d:,.0f} kWh")
-    k3.metric("Vente reseau",  f"{di_d:,.0f} kWh")
+    k2.metric("Achat reseau",      f"{ch_d:,.0f} kWh")
+    k3.metric("Vente reseau",      f"{di_d:,.0f} kWh")
+    k4, k5, k6 = st.columns(3)
     k4.metric("SOC min / max", f"{soc_min_d:.0f}% / {soc_max_d:.0f}%")
     k5.metric("Spot moyen",    f"{spot_avg:.1f} EUR/MWh")
-    k6.metric("Spread jour",   f"{spot_max-spot_min:.1f} EUR/MWh")
+    k6.metric("Spread jour",   f"{spot_max - spot_min:.1f} EUR/MWh")
 
     fig_d = make_subplots(
         rows=3, cols=1, shared_xaxes=True,
