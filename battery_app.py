@@ -279,9 +279,9 @@ cap_loss   = (1 - cap_final / capacity_kwh) * 100
 
 _render_header()
 c1, c2, c3, c4, c5, c6 = st.columns(6)
-c1.metric("Profit net",       f"{net_profit:,.0f} EUR")
-c2.metric("Profit / jour",    f"{avg_daily:,.1f} EUR/j")
-c3.metric("Profit annuel",    f"{avg_daily*365:,.0f} EUR/an")
+c1.metric("Contribution Brut",     f"{net_profit:,.0f} EUR")
+c2.metric("Contribution / jour",   f"{avg_daily:,.1f} EUR/j")
+c3.metric("Contribution annuelle", f"{avg_daily*365:,.0f} EUR/an")
 c4.metric("FEC cumules",      f"{fec_total:.0f}")
 c5.metric("Capacite finale",  f"{cap_final:,.0f} kWh")
 c6.metric("Perte capacite",   f"{cap_loss:.2f} %")
@@ -311,7 +311,7 @@ with tab_monthly:
     fig_m = make_subplots(specs=[[{"secondary_y": True}]])
     colors = ['steelblue' if v >= 0 else 'tomato' for v in monthly['profit']]
     fig_m.add_trace(go.Bar(
-        x=monthly.index, y=monthly['profit'], name='Profit mensuel',
+        x=monthly.index, y=monthly['profit'], name='Contribution mensuelle',
         marker_color=colors, text=monthly['profit'].apply(lambda v: f"{v:,.0f}"),
         textposition='outside'), secondary_y=False)
     fig_m.add_trace(go.Scatter(
@@ -319,20 +319,20 @@ with tab_monthly:
         line=dict(color='darkorange', width=2.5)), secondary_y=True)
     fig_m.update_layout(height=380, margin=dict(t=20, b=20),
                          legend=dict(orientation='h', y=1.08))
-    fig_m.update_yaxes(title_text="Profit mensuel (EUR)", secondary_y=False)
-    fig_m.update_yaxes(title_text="Profit cumule (EUR)", secondary_y=True)
+    fig_m.update_yaxes(title_text="Contribution mensuelle (EUR)", secondary_y=False)
+    fig_m.update_yaxes(title_text="Contribution cumulee (EUR)", secondary_y=True)
     st.plotly_chart(fig_m, use_container_width=True)
 
     # Tableau mensuel
     tbl = monthly[['revenue', 'cost', 'profit', 'charge_kwh', 'vente_kwh', 'fec_mois']].copy()
-    tbl.columns = ['CA vente (EUR)', 'Cout achat (EUR)', 'Profit (EUR)',
+    tbl.columns = ['CA vente (EUR)', 'Cout achat (EUR)', 'Contribution (EUR)',
                    'Achat (kWh)', 'Vente (kWh)', 'FEC mois']
     st.dataframe(
         tbl.style.format({
             'CA vente (EUR)': '{:,.2f}', 'Cout achat (EUR)': '{:,.2f}',
-            'Profit (EUR)': '{:,.2f}', 'Achat (kWh)': '{:,.0f}',
+            'Contribution (EUR)': '{:,.2f}', 'Achat (kWh)': '{:,.0f}',
             'Vente (kWh)': '{:,.0f}', 'FEC mois': '{:.1f}',
-        }).background_gradient(subset=['Profit (EUR)'], cmap='RdYlGn'),
+        }).background_gradient(subset=['Contribution (EUR)'], cmap='RdYlGn'),
         use_container_width=True,
     )
 
@@ -364,7 +364,7 @@ with tab_daily:
     spot_min  = day_data['spot_price_eur_mwh'].min()
 
     k1, k2, k3, k4, k5, k6 = st.columns(6)
-    k1.metric("Profit jour",   f"{pr_d:,.1f} EUR")
+    k1.metric("Contribution jour", f"{pr_d:,.1f} EUR")
     k2.metric("Achat reseau",  f"{ch_d:,.0f} kWh")
     k3.metric("Vente reseau",  f"{di_d:,.0f} kWh")
     k4.metric("SOC min / max", f"{soc_min_d:.0f}% / {soc_max_d:.0f}%")
@@ -509,7 +509,7 @@ with tab_params:
         st.table(pd.DataFrame({
             "Parametre": ["Periode", "Duree", "SOC plage", "FEC cumules",
                           "Spread min decharge", "Spread agregateur",
-                          "Ratio achat/vente", "Profit/FEC"],
+                          "Ratio achat/vente", "Contribution/FEC"],
             "Valeur": [
                 f"{results.index[0].date()} → {results.index[-1].date()}",
                 f"{n_days} jours",
