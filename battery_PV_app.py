@@ -149,9 +149,12 @@ def optimize_schedule_pv(prices, pv_kwh, soc_init_kwh, capacity_kwh,
     Implicite :
       pv_to_bat = pv_kwh - pv_sell           [PV vers batterie]
 
-    Contrainte puissance totale + anti-simultaneite :
-      ch_grid[t] + (pv[t]-pv_sell[t]) + di[t] <= P_max
-      <=>  ch_grid[t] - pv_sell[t] + di[t]   <= P_max - pv[t]
+    Contraintes puissance (deux regles separees) :
+      Charge totale     : ch_grid[t] + pv_to_bat[t] <= P_max
+      Anti-boucle reseau: ch_grid[t] + di[t]        <= P_max
+      => pv_to_bat[t] et di[t] peuvent etre non nuls simultanement :
+         le PV recharge la batterie pendant que la batterie decharge,
+         ce qui est physiquement valide et economiquement pertinent si spot > FIT.
 
     pv_strategy :
       1 = economique — le LP arbitre librement entre vente FIT et stockage.
@@ -192,14 +195,22 @@ def optimize_schedule_pv(prices, pv_kwh, soc_init_kwh, capacity_kwh,
         A_rows.append(row.copy());  b_rows.append(soc_max_kwh - soc_init_kwh - cumsum_pv[t])
         A_rows.append(-row.copy()); b_rows.append(soc_init_kwh - soc_min_kwh + cumsum_pv[t])
 
-    # Anti-simultaneite + limite puissance totale
+    # Contrainte 1 — Limite charge totale : ch_grid + pv_to_bat <= P_max
+    # Contrainte 2 — Anti-boucle reseau  : ch_grid + di       <= P_max
+    # (pv_to_bat et di sont intentionnellement decouplés : le PV peut recharger
+    #  la batterie meme en mode decharge si spot > FIT)
     for t in range(T):
-        row = np.zeros(3 * T)
-        row[t]       =  1.0
-        row[T + t]   =  1.0
-        row[2*T + t] = -1.0
-        A_rows.append(row)
+        row_ch = np.zeros(3 * T)
+        row_ch[t]       =  1.0    # ch_grid
+        row_ch[2*T + t] = -1.0   # -pv_sell = +pv_to_bat
+        A_rows.append(row_ch)
         b_rows.append(p_max - pv[t])
+
+        row_ar = np.zeros(3 * T)
+        row_ar[t]     =  1.0    # ch_grid
+        row_ar[T + t] =  1.0    # di
+        A_rows.append(row_ar)
+        b_rows.append(p_max)
 
     bounds = (
         [(0.0, p_max)] * T +
@@ -222,21 +233,13 @@ def optimize_schedule_pv(prices, pv_kwh, soc_init_kwh, capacity_kwh,
     pv_sell[pv_sell < 0.01] = 0.0
     pv_to_bat = np.maximum(pv - pv_sell, 0.0)
 
-    # Filet anti-simultaneite post-LP
+    # Filet anti-boucle reseau post-LP :
+    # ch_grid et di sont mutuellement exclusifs (achat + vente reseau = perte seche).
+    # pv_to_bat + di sont autorises : le PV peut recharger la batterie pendant
+    # la decharge si spot > FIT (voir arbitrage strategique).
     for t in range(T):
-        ch_tot = ch_grid[t] + pv_to_bat[t]
-        if ch_tot > 0.0 and di[t] > 0.0:
-            delta = ch_tot * eta_c - di[t] / eta_d
-            if delta >= 0.0:
-                scale        = min(delta / eta_c, p_max) / max(ch_tot, 1e-9)
-                ch_grid[t]  *= scale
-                pv_to_bat[t] = min(pv_to_bat[t] * scale, pv[t])
-                pv_sell[t]   = pv[t] - pv_to_bat[t]
-                di[t]        = 0.0
-            else:
-                ch_grid[t] = pv_to_bat[t] = 0.0
-                pv_sell[t] = pv[t]
-                di[t]      = min(-delta * eta_d, p_max)
+        if ch_grid[t] > 0.01 and di[t] > 0.01:
+            ch_grid[t] = 0.0
 
     return ch_grid, di, pv_sell, pv_to_bat
 
@@ -315,7 +318,7 @@ def run_simulation_pv(df_sim, params, pv_array, progress_cb=None):
                 if price - last_charge_px < min_spread_kwh:
                     di_h = 0.0
 
-            # Plafonnement physique SOC
+            # Plafonnement physique SOC (charge)
             ch_tot   = ch_grid_h + pv_bat_h
             headroom = max(0.0, (soc_max - soc_kwh) / eta_c)
             if ch_tot > headroom:
@@ -323,22 +326,15 @@ def run_simulation_pv(df_sim, params, pv_array, progress_cb=None):
                 ch_grid_h *= scale
                 pv_bat_h  *= scale
                 pv_sell_h  = pv_h - pv_bat_h
-            di_h = min(di_h, max(0.0, (soc_kwh - soc_min) * eta_d))
 
-            # Filet anti-simultaneite
-            ch_tot = ch_grid_h + pv_bat_h
-            if ch_tot > 0.0 and di_h > 0.0:
-                delta = ch_tot * eta_c - di_h / eta_d
-                if delta >= 0.0:
-                    scale      = min(delta / eta_c, p_max) / max(ch_tot, 1e-9)
-                    ch_grid_h *= scale
-                    pv_bat_h  *= scale
-                    pv_sell_h  = pv_h - pv_bat_h
-                    di_h = 0.0
-                else:
-                    ch_grid_h = pv_bat_h = 0.0
-                    pv_sell_h = pv_h
-                    di_h      = min(-delta * eta_d, p_max)
+            # Anti-boucle reseau : ch_grid et di mutuellement exclusifs
+            # (pv_bat_h + di_h autorises : arbitrage PV pendant decharge)
+            if ch_grid_h > 0.01 and di_h > 0.01:
+                ch_grid_h = 0.0
+
+            # Plafonnement decharge — la recharge PV simultanee elargit la marge
+            # soc_end = soc + pv_bat*eta_c - di/eta_d >= soc_min
+            di_h = min(di_h, max(0.0, (soc_kwh - soc_min + pv_bat_h * eta_c) * eta_d))
 
             if ch_grid_h > 0.01:
                 last_charge_px = price
