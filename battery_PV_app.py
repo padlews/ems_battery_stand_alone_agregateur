@@ -138,7 +138,7 @@ def compute_pv_profile(
 
 def optimize_schedule_pv(prices, pv_kwh, soc_init_kwh, capacity_kwh,
                           p_max, eta_c, eta_d, soc_min_pct, soc_max_pct,
-                          agg_spread, fit_price):
+                          agg_spread, fit_price, pv_strategy=2):
     """
     LP horizon T avec generateur PV.
 
@@ -152,6 +152,10 @@ def optimize_schedule_pv(prices, pv_kwh, soc_init_kwh, capacity_kwh,
     Contrainte puissance totale + anti-simultaneite :
       ch_grid[t] + (pv[t]-pv_sell[t]) + di[t] <= P_max
       <=>  ch_grid[t] - pv_sell[t] + di[t]   <= P_max - pv[t]
+
+    pv_strategy :
+      1 = economique — le LP arbitre librement entre vente FIT et stockage.
+      2 = priorite batterie — penalite large, vente uniquement si SOC_max sature.
     """
     T  = len(prices)
     pv = np.asarray(pv_kwh, dtype=float)
@@ -162,8 +166,17 @@ def optimize_schedule_pv(prices, pv_kwh, soc_init_kwh, capacity_kwh,
     soc_min_kwh = soc_min_pct * capacity_kwh
     soc_max_kwh = soc_max_pct * capacity_kwh
 
-    # Objectif : min sum(ch_grid*spot - di*resale - pv_sell*fit)
-    c_obj = np.concatenate([prices, -resale, -fit_price * np.ones(T)])
+    # Strategie de routage PV :
+    #   1 — Economique : coefficient FIT negatif => le LP arbitre stockage vs vente
+    #       selon la rentabilite globale sur l'horizon.
+    #   2 — Priorite batterie : penalite >> tout prix realisable => le LP ne vend
+    #       le PV que si la contrainte SOC_max est physiquement saturee.
+    #       Le revenu FIT reel est calcule dans la simulation independamment.
+    if pv_strategy == 1:
+        _pv_sell_cost = -fit_price
+    else:
+        _pv_sell_cost = 1000.0 - fit_price
+    c_obj = np.concatenate([prices, -resale, _pv_sell_cost * np.ones(T)])
 
     # Contribution cumulee du PV disponible au SOC (constante, RHS)
     cumsum_pv = np.cumsum(eta_c * pv)
@@ -242,6 +255,7 @@ def run_simulation_pv(df_sim, params, pv_array, progress_cb=None):
     eta_d          = params['eta_d']
     min_spread_kwh = params.get('min_discharge_spread_kwh', 0.0)
     fit_price      = params.get('fit_price', 0.10)
+    pv_strategy    = params.get('pv_strategy', 2)
     last_charge_px = None
 
     dates  = sorted(set(df_sim.index.date))
@@ -265,6 +279,7 @@ def run_simulation_pv(df_sim, params, pv_array, progress_cb=None):
             capacity_kwh=cap_kwh, p_max=p_max, eta_c=eta_c, eta_d=eta_d,
             soc_min_pct=params['soc_min_pct'], soc_max_pct=params['soc_max_pct'],
             agg_spread=params['agg_spread'], fit_price=fit_price,
+            pv_strategy=pv_strategy,
         )
 
         ch_g_am, di_am, pvs_am, pvb_am = optimize_schedule_pv(
@@ -424,6 +439,23 @@ with st.sidebar:
             "Tarif rachat surplus PV (EUR/kWh)", 0.0, 0.50, 0.10, 0.01, format="%.3f",
             help="Prix de rachat du surplus PV non stocke dans la batterie.")
 
+        pv_strategy = st.radio(
+            "Strategie de routage PV",
+            options=[2, 1],
+            format_func=lambda x: (
+                "Strat. 2 — Priorite batterie" if x == 2
+                else "Strat. 1 — Economique (arbitrage FIT / spot)"
+            ),
+            help=(
+                "**Strategie 1 — Economique** : le LP arbitre librement entre stocker "
+                "le PV dans la batterie et le vendre au tarif FIT, selon la rentabilite "
+                "globale sur l'horizon de planification.\n\n"
+                "**Strategie 2 — Priorite batterie** : le PV est toujours route vers la "
+                "batterie en premier. Il n'est vendu au tarif FIT que si la batterie est "
+                "physiquement pleine (SOC max atteint)."
+            ),
+        )
+
         st.markdown("**Localisation du generateur (France)**")
 
         if HAS_FOLIUM:
@@ -498,6 +530,7 @@ if run_btn:
             aging_per_fec=aging_per_fec, capacity_eol=capacity_eol,
             min_discharge_spread_kwh=min_spread_mwh / 1000.0,
             fit_price=pv_fit_price,
+            pv_strategy=pv_strategy,
         )
         with st.spinner("Calcul du profil PV..."):
             pv_array = compute_pv_profile(
@@ -521,6 +554,7 @@ if run_btn:
             'capacity_kwp': pv_capacity_kwp, 'specific_yield': pv_specific_yield,
             'lat': pv_lat, 'lon': pv_lon,
             'fit_price': pv_fit_price, 'annual_kwh': pv_annual_kwh,
+            'pv_strategy': pv_strategy,
         }
         st.session_state['spot'] = df_spot
 
@@ -842,7 +876,7 @@ with tab_params_tab:
                 "Parametre": ["Capacite PV", "Productible specifique",
                               "Prod. annuelle cible", "Prod. simulee",
                               "Tarif FIT", "Latitude", "Longitude",
-                              "Autoconsommation"],
+                              "Autoconsommation", "Strategie routage"],
                 "Valeur": [
                     f"{pv_p.get('capacity_kwp', 0):,.0f} kWc",
                     f"{pv_p.get('specific_yield', 0):,.0f} kWh/kWc",
@@ -852,6 +886,8 @@ with tab_params_tab:
                     f"{pv_p.get('lat', 0):.4f} N",
                     f"{pv_p.get('lon', 0):.4f} E",
                     f"{self_cons_pct:.1f} %",
+                    ("Economique" if pv_p.get('pv_strategy', 2) == 1
+                     else "Priorite batterie"),
                 ],
             }).set_index("Parametre"))
 
